@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import os, sys, json, urllib.request, subprocess
+from pathlib import Path
+
+PROJECT = Path.home() / "ai-free-by-yubbiXploit"
+ASCII = PROJECT / "ascii.txt"
+KEY = PROJECT / "apikey.txt"
+
+C = {"cyan":"\033[96m","green":"\033[92m","yellow":"\033[93m","magenta":"\033[95m","red":"\033[91m","reset":"\033[0m"}
+
+DEFAULT_ASCII = f"""{C['magenta']}
+╔════════════════════════════════════════════════════════╗
+║  🚀 AI FREE — by yubbiXploit                              ║
+║  Simple, fast, terminal AI powered by OpenAI.            ║
+╚════════════════════════════════════════════════════════╝
+{C['reset']}"""
+
+def ensure_files():
+    PROJECT.mkdir(parents=True, exist_ok=True)
+    if not ASCII.exists(): ASCII.write_text(DEFAULT_ASCII)
+    if not KEY.exists(): KEY.write_text("sk-ISI_API_KEY_KAMU_DI_SINI")
+
+def read_ascii(): return ASCII.read_text() if ASCII.exists() else DEFAULT_ASCII
+
+def get_key():
+    if KEY.exists():
+        k = KEY.read_text().strip()
+        return k if k.startswith("sk-") else None
+    return None
+
+def set_key():
+    k = input("🔑 Masukkan OpenAI API key (sk-...): ").strip()
+    if not k:
+        print("❌ Tidak ada input. Batal."); return
+    KEY.write_text(k); print("✅ API key tersimpan di", KEY)
+
+def edit_ascii():
+    editor = os.environ.get("EDITOR") or "nano"
+    subprocess.run([editor, str(ASCII)])
+
+def show_key():
+    k = get_key()
+    if not k: print("❌ API key tidak ditemukan."); return
+    print("🔑", k[:6]+"..."+k[-4:])
+
+def remove_key():
+    if KEY.exists(): KEY.unlink(); print("🗑️ API key dihapus.")
+    else: print("⚠️ Tidak ada api key untuk dihapus.")
+
+def call_openai(api_key, prompt):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {"Content-Type":"application/json","Authorization":f"Bearer {api_key}"}
+    data = {"model":"gpt-4o-mini","messages":[{"role":"system","content":"Kamu asisten yang menjawab dalam Bahasa Indonesia, sopan dan ringkas."},{"role":"user","content":prompt}],"max_tokens":512,"temperature":0.7}
+    req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            res = json.load(r)
+            try: return res["choices"][0]["message"]["content"].strip()
+            except: return res["choices"][0].get("text","").strip()
+    except Exception as e:
+        if "401" in str(e): return "❌ API key tidak valid atau belum aktif. Gunakan `ai --set-key`."
+        return f"❌ Error: {e}"
+
+def repl(api_key):
+    os.system("clear"); print(read_ascii())
+    print(f"{C['green']}🤖 Mode interaktif — ketik 'exit' untuk keluar.{C['reset']}")
+    while True:
+        q = input("You: ").strip()
+        if q.lower() in ("exit","quit","bye"): print("👋 Sampai jumpa."); break
+        if not q: continue
+        print("AI: (memproses...)")
+        out = call_openai(api_key, q)
+        print("---\n", out, "\n---")
+
+def main():
+    ensure_files()
+    args = sys.argv[1:]
+    if "--set-key" in args: set_key(); return
+    if "--edit-ascii" in args: edit_ascii(); return
+    if "--show-key" in args: show_key(); return
+    if "--remove-key" in args: remove_key(); return
+    key = os.environ.get("OPENAI_API_KEY") or get_key()
+    if not key:
+        print("⚠️  API key belum diatur. Jalankan: ai --set-key"); return
+    repl(key)
+
+if __name__ == "__main__":
+    main()
